@@ -44,7 +44,7 @@ do
 	IP=$( printf '%s\n' "$line" | awk '{print $2}' )
 	IPCOUNT=$( printf '%s\n' "$line" | awk '{print $1}' )
 	IPTYPE=$( printf '%s\n' "$line" | awk '{print $3}' )
-	echo "<td><a href=\"$WHOISSERVER$IP\">"$IPCOUNT"&nbsp;"$IP"&nbsp;"$IPTYPE"</a><td>" >> $OUTPUTFILE
+	echo "<td>"$IPCOUNT"&nbsp;<a href=\"$WHOISSERVER$IP\">"$IP"</a>&nbsp;"$IPTYPE"<td>" >> $OUTPUTFILE
 	if [ $I -eq 5 ]
 	then
 		echo  "</tr>" >> $OUTPUTFILE
@@ -88,7 +88,7 @@ do
 	IP=$( printf '%s\n' "$line" | awk '{print $2}' )
 	IPCOUNT=$( printf '%s\n' "$line" | awk '{print $1}' )
 	IPTYPE=$( printf '%s\n' "$line" | awk '{print $3}' )
-	echo "<td><a href=\"$WHOISSERVER$IP\">"$IPCOUNT"&nbsp;"$IP"&nbsp;"$IPTYPE"</a><td>" >> $OUTPUTFILE
+	echo "<td>"$IPCOUNT"&nbsp;<a href=\"$WHOISSERVER$IP\">"$IP"</a>&nbsp;"$IPTYPE"<td>" >> $OUTPUTFILE
 	if [ $I -eq 5 ]
 	then
 		echo  "</tr>" >> $OUTPUTFILE
