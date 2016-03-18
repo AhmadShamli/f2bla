@@ -6,7 +6,9 @@ and run it by calling the script in terminal.
 
 You also can run this script using cron.
 Add below cron to crontab and it will run everyday at 0211. Or change it for how many times you want.
-<11 2	* * *	root    /root/analyze.sh>
+
+11 2	* * *	root    /root/analyze.sh
+
 
 By hostname require logresolve, which can be installed by apt-get install apache2-utils
 
