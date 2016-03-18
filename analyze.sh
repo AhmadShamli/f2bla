@@ -14,9 +14,10 @@ OUTPUTLOCATION='/var/www/'
 FILENAME='fail2ban.html'
 WHOISSERVER='http://whois.ens.my/'
 OUTPUTFILE=$OUTPUTLOCATION$FILENAME
-LOG=TRUE
+LOG=true
 DATETODAY=$( date )
 DATETODAYDMY=$( date +%d-%m-%Y )
+RESOLVEHOST=true
 ###/Config###
 
 ###HEAD###
@@ -143,31 +144,34 @@ else
 	done
 fi
 echo '</table></div>' >> $OUTPUTFILE
-echo '<div id="row"><h2>Banned Count with Hostname</h2><table>' >> $OUTPUTFILE
-zgrep -h "Ban " /var/log/fail2ban.log* | awk '{print $NF}' | sort | logresolve | sort | uniq -c | sort -n > TEMPVAR
-if [ ! -s TEMPVAR ]
+if [ "$RESOLVEHOST" = true ]
 then
-	echo  "<tr><td>No IP banned yet.</td></tr>" >> $OUTPUTFILE
-else
-	I=0
-	cat TEMPVAR | while IFS= read -r line
-	do
-		if [ $I -eq 0 ]
-		then
-			echo "<tr>" >> $OUTPUTFILE
-		fi
-		echo "<td>"$line"<td>" >> $OUTPUTFILE
-		if [ $I -eq 1 ]
-		then
-			echo  "</tr>" >> $OUTPUTFILE
-			I=0
-		elif [ $I -lt 1 ]
-		then
-			I=$(( I + 1 ))
-		fi
-	done
+	echo '<div id="row"><h2>Banned Count with Hostname</h2><table>' >> $OUTPUTFILE
+	zgrep -h "Ban " /var/log/fail2ban.log* | awk '{print $NF}' | sort | logresolve | sort | uniq -c | sort -n > TEMPVAR
+	if [ ! -s TEMPVAR ]
+	then
+		echo  "<tr><td>No IP banned yet.</td></tr>" >> $OUTPUTFILE
+	else
+		I=0
+		cat TEMPVAR | while IFS= read -r line
+		do
+			if [ $I -eq 0 ]
+			then
+				echo "<tr>" >> $OUTPUTFILE
+			fi
+			echo "<td>"$line"<td>" >> $OUTPUTFILE
+			if [ $I -eq 1 ]
+			then
+				echo  "</tr>" >> $OUTPUTFILE
+				I=0
+			elif [ $I -lt 1 ]
+			then
+				I=$(( I + 1 ))
+			fi
+		done
+	fi
+	echo '</table></div>' >> $OUTPUTFILE
 fi
-echo '</table></div>' >> $OUTPUTFILE
 ###/BODY###
 
 
