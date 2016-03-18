@@ -8,13 +8,15 @@
 #
 #
 
-OUTPUTLOCATION='/var/www/1ma/'
+###Config###
+OUTPUTLOCATION='/var/www/'
 FILENAME='fail2ban.html'
 WHOISSERVER='http://whois.ens.my/'
 OUTPUTFILE=$OUTPUTLOCATION$FILENAME
 LOG=TRUE
 DATETODAY=$( date )
 DATETODAYDMY=$( date +%d-%m-%Y )
+###/Config###
 
 ###HEAD###
 cat > $OUTPUTFILE <<END
@@ -35,7 +37,6 @@ END
 
 ###BODY###
 echo "<div id=\"row\"><h2>Banned Count by IP < today $DATETODAYDMY ></h2><table>" >> $OUTPUTFILE
-#grep "Ban " /var/log/fail2ban.log | grep `date +%Y-%m-%d` | awk '{print $NF}' | sort | uniq -c | sort -n > TEMPVAR
 grep "Ban " /var/log/fail2ban.log | grep `date +%Y-%m-%d` | awk -F[\ \:] '{print $10,$8}' | sort | uniq -c | sort -n > TEMPVAR
 if [ ! -s TEMPVAR ]
 then
@@ -89,7 +90,6 @@ else
 fi
 echo '</table></div>' >> $OUTPUTFILE
 echo '<div id="row"><h2>Banned Count by IP</h2><table>' >> $OUTPUTFILE
-#zgrep -h "Ban " /var/log/fail2ban.log* | awk '{print $NF}' | sort | uniq -c | sort > TEMPVAR
 zgrep -h "Ban " /var/log/fail2ban.log* | awk -F[\ \:] '{print $10,$8}' | sort | uniq -c | sort -n > TEMPVAR
 if [ ! -s TEMPVAR ]
 then
@@ -143,7 +143,6 @@ else
 fi
 echo '</table></div>' >> $OUTPUTFILE
 echo '<div id="row"><h2>Banned Count with Hostname</h2><table>' >> $OUTPUTFILE
-#awk '($(NF-1) = /Ban/){print $NF,"("$NF")"}' /var/log/fail2ban.log | sort | logresolve | uniq -c | sort -n > TEMPVAR
 zgrep -h "Ban " /var/log/fail2ban.log* | awk '{print $NF}' | sort | logresolve | sort | uniq -c | sort -n > TEMPVAR
 if [ ! -s TEMPVAR ]
 then
