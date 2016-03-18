@@ -4,8 +4,9 @@
 #This script will read,analyze and output to a file for better readable format
 #This script is based from  http://www.the-art-of-web.com/system/fail2ban-log/
 #
-#
-#
+#you can run this script automatically by cron
+#for everyday at 0211 will execute this script located at inside root(you can change this location)
+#==> 11 2	* * *	root    /root/analyze.sh  <==
 #
 
 ###Config###
