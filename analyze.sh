@@ -17,7 +17,12 @@ OUTPUTFILE=$OUTPUTLOCATION$FILENAME
 LOG=true
 DATETODAY=$( date )
 DATETODAYDMY=$( date +%d-%m-%Y )
-RESOLVEHOST=true
+RESOLVEHOST=false
+
+SENDEMAIL=true
+FROMEMAIL='vpc@sd1mavpc.com'
+TOEMAIL='shamli.sahidi@vads.com'
+
 ###/Config###
 
 ###HEAD###
@@ -145,7 +150,7 @@ else
 fi
 echo '</table></div>' >> $OUTPUTFILE
 if [ "$RESOLVEHOST" = true ]
-then
+	then
 	echo '<div id="row"><h2>Banned Count with Hostname</h2><table>' >> $OUTPUTFILE
 	zgrep -h "Ban " /var/log/fail2ban.log* | awk '{print $NF}' | sort | logresolve | sort | uniq -c | sort -n > TEMPVAR
 	if [ ! -s TEMPVAR ]
@@ -182,3 +187,11 @@ cat >> $OUTPUTFILE<<END
 </html>
 END
 ###/Footer###
+
+###Email###
+if [ "$SENDEMAIL" = true ]
+then
+	echo "Sending Email"
+	mutt -e 'set content_type="text/html"' -e "send-hook . \"my_hdr From: ${FROMEMAIL} <${FROMEMAIL}>\"" ${TOEMAIL} -s "Fail2Ban Log Analyzed" <  ${OUTPUTFILE}
+fi
+###/Email###
