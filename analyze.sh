@@ -21,7 +21,7 @@ RESOLVEHOST=false
 
 SENDEMAIL=true
 FROMEMAIL='vpc@sd1mavpc.com'
-TOEMAIL='shamli.sahidi@vads.com'
+TOEMAIL='email@example.com'
 
 ###/Config###
 
