@@ -8,25 +8,41 @@
 #for everyday at 0211 will execute this script located at inside root(you can change this location)
 #==> 11 2	* * *	root    /root/analyze.sh  <==
 #
+# https://github.com/AhmadShamli/f2bla/
 
 ###Config###
+LOGFILE='/var/log/fail2ban.log'
 OUTPUTLOCATION='/var/www/'
+
+WEBDOMAIN='https://www.example.com/'
 FILENAME='fail2ban.html'
-WHOISSERVER='http://whois.ens.my/'
+SIMPLEFILENAME='fail2ban_short.html'
 OUTPUTFILE=$OUTPUTLOCATION$FILENAME
-LOG=true
+SIMPLEOUTPUTFILE=$OUTPUTLOCATION$SIMPLEFILENAME
+
+WHOISSERVER='http://whois.ens.my/'
+
 DATETODAY=$( date )
 DATETODAYDMY=$( date +%d-%m-%Y )
+
+COUNTBYIP=true
+RESOLVESUBNET=true
 RESOLVEHOST=false
 
+SIMPLE=true
+
 SENDEMAIL=true
+if [ "$1" = 'noemail' ]
+then
+	SENDEMAIL=false
+fi
 FROMEMAIL='vpc@sd1mavpc.com'
 TOEMAIL='email@example.com'
 
 ###/Config###
 
 ###HEAD###
-cat > $OUTPUTFILE <<END
+read -d '' PAGEHEAD <<END
 <!DOCTYPE html>
 <html>
 <head>
@@ -37,161 +53,257 @@ cat > $OUTPUTFILE <<END
 <div id="body">
 <div id="title">
 <h1>Fail2ban Log Analyzer</h1>
-<p>Last Update: $DATETODAY </p>
+<p>Today Update: $DATETODAY </p>
+<p>Full Report: <a href='$WEBDOMAIN$FILENAME' >Click HERE</a></p>
 </div>
 END
+echo "$PAGEHEAD" > $OUTPUTFILE
+echo "$PAGEHEAD" > $SIMPLEOUTPUTFILE
 ###/HEAD###
 
 ###BODY###
-echo "<div id=\"row\"><h2>Banned Count by IP < today $DATETODAYDMY ></h2><table>" >> $OUTPUTFILE
-grep "Ban " /var/log/fail2ban.log | grep `date +%Y-%m-%d` | awk -F[\ \:] '{print $10,$8}' | sort | uniq -c | sort -n > TEMPVAR
-if [ ! -s TEMPVAR ]
+echo "Generating : Banned Summary"
+BANNEDSUMMARY="<div id=\"row\"><h2>Banned Count Summary</h2><table border='1'>"
+BANNEDSUMMARY="$BANNEDSUMMARY <tr><td colspan=1 style='min-width:200px'></td><td align='center' style='min-width:100px'>Count</td></tr>"
+
+BANNED=$( fail2ban-client status ssh | grep 'Total banned' | awk '{print $4}' ) 
+BANNEDSUMMARY="$BANNEDSUMMARY <tr><td colspan=1 align='center'>Current<br /><small>Total IP currently Banned</small></td><td align='center'>$BANNED</td></tr>"
+
+TODAY=$( date +%Y-%m-%d )
+BANNED=$( grep "Ban " $LOGFILE | grep $TODAY | wc -l ) 
+BANNEDSUMMARY="$BANNEDSUMMARY <tr><td colspan=1 align='center'>Today<br /><small>$TODAY</small></td><td align='center'>$BANNED</td></tr>"
+
+YESTERDAY=$( date -d 'yesterday' +%Y-%m-%d )
+BANNED=$( grep "Ban " $LOGFILE | grep $YESTERDAY | wc -l ) 
+BANNEDSUMMARY="$BANNEDSUMMARY <tr><td colspan=1 align='center'>Yesterday<br /><small>$YESTERDAY</small></td><td align='center'>$BANNED</td></tr>"
+
+THISMONTH=$( date +%Y-%m )
+BANNED=$( zgrep -h "Ban " $LOGFILE* | grep $THISMONTH | wc -l )
+BANNEDSUMMARY="$BANNEDSUMMARY <tr><td colspan=1 align='center'>This Month<br /><small>$THISMONTH</small></td><td align='center'>$BANNED</td></tr>"
+
+LASTMONTH=$( date -d 'last month' +%Y-%m )
+BANNED=$( zgrep -h "Ban " $LOGFILE* | grep $LASTMONTH | wc -l )
+BANNEDSUMMARY="$BANNEDSUMMARY <tr><td colspan=1 align='center'>Last Month<br /><small>$LASTMONTH</small></td><td align='center'>$BANNED</td></tr>"
+
+THISYEAR=$( date +%Y- )
+BANNED=$( zgrep -h "Ban " $LOGFILE* | grep $THISYEAR | wc -l )
+BANNEDSUMMARY="$BANNEDSUMMARY <tr><td colspan=1 align='center'>This Year<br /><small>$THISYEAR</small></td><td align='center'>$BANNED</td></tr>"
+
+LASTYEAR=$( date -d 'last year' +%Y- )
+BANNED=$( zgrep -h "Ban " $LOGFILE* | grep $LASTYEAR | wc -l )
+BANNEDSUMMARY="$BANNEDSUMMARY <tr><td colspan=1 align='center'>Last year<br /><small>$LASTYEAR</small></td><td align='center'>$BANNED</td></tr>"
+
+BANNEDSUMMARY="$BANNEDSUMMARY </table></div>"
+echo "$BANNEDSUMMARY" >> $OUTPUTFILE
+echo "$BANNEDSUMMARY" >> $SIMPLEOUTPUTFILE
+#############
+
+echo "Generating : Todays' Banned IP"
+BANNEDTODAY="<div id=\"row\"><h2>Todays' Banned IP <small>< today $DATETODAYDMY ></small></h2><table>"
+TEMPVAR=$( grep "Ban " $LOGFILE | grep `date +%Y-%m-%d` | awk -F[\ \:] '{print $10,$8}' | sort | uniq -c | sort -n )
+if [ -z TEMPVAR ]
 then
-	echo  "<tr><td>No IP banned for this date.</td></tr>" >> $OUTPUTFILE
+	BANNEDTODAY="$BANNEDTODAY <tr><td>No IP banned for this date.</td></tr>"
 else
 	I=0
-	cat TEMPVAR | while IFS= read -r line
+	while IFS= read -r line
 	do
 		if [ $I -eq 0 ]
 		then
-			echo "<tr>" >> $OUTPUTFILE
+			BANNEDTODAY="$BANNEDTODAY <tr>"
 		fi
 		IP=$( printf '%s\n' "$line" | awk '{print $2}' )
 		IPCOUNT=$( printf '%s\n' "$line" | awk '{print $1}' )
 		IPTYPE=$( printf '%s\n' "$line" | awk '{print $3}' )
-		echo "<td>"$IPCOUNT"&nbsp;<a href=\"$WHOISSERVER$IP\" target=\"_blank\">"$IP"</a>&nbsp;"$IPTYPE"<td>" >> $OUTPUTFILE
-		if [ $I -eq 5 ]
+		BANNEDTODAY="$BANNEDTODAY <td>$IPCOUNT &nbsp;<a href=\"$WHOISSERVER$IP\" target=\"_blank\">$IP</a>&nbsp;$IPTYPE<td>"
+		if [ $I -eq 4 ]
 		then
-			echo  "</tr>" >> $OUTPUTFILE
+			BANNEDTODAY="$BANNEDTODAY </tr>"
 			I=0
-		elif [ $I -lt 5 ]
+		elif [ $I -lt 4 ]
 		then
 			I=$(( I + 1 ))
 		fi
-	done
+	done < <(echo "$TEMPVAR")
 fi
-echo '</table></div>' >> $OUTPUTFILE
-echo '<div id="row"><h2>Banned Count Group by Date and section</h2><table>' >> $OUTPUTFILE
-zgrep -h "Ban " /var/log/fail2ban.log* | awk '{print $5,$1}' | sort | uniq -c | sort -n > TEMPVAR
-if [ ! -s TEMPVAR ]
+BANNEDTODAY="$BANNEDTODAY </table></div>"
+echo "$BANNEDTODAY" >> $OUTPUTFILE
+echo "$BANNEDTODAY" >> $SIMPLEOUTPUTFILE
+#############
+
+echo "Generating : Top 100 Date"
+BANNEDBYDATE='<div id="row"><h2>Top 100 Date <small>with highest banned count</small></h2><table>'
+TEMPVAR=$( zgrep -h "Ban " $LOGFILE* | awk '{print $5,$1}' | sort | uniq -c | sort -rn )
+if [ -z TEMPVAR ]
 then
-	echo  "<tr><td>No IP banned yet.</td></tr>" >> $OUTPUTFILE
+	BANNEDBYDATE="$BANNEDBYDATE <tr><td>No IP banned yet.</td></tr>"
 else
 	I=0
-	cat TEMPVAR | while IFS= read -r line
+	C=0
+	while IFS= read -r line
 	do
 		if [ $I -eq 0 ]
 		then
-			echo "<tr>" >> $OUTPUTFILE
+			BANNEDBYDATE="$BANNEDBYDATE <tr>"
 		fi
-		echo "<td>"$line"</a><td>" >> $OUTPUTFILE
-		if [ $I -eq 5 ]
+		BANNEDBYDATE="$BANNEDBYDATE <td>"$line"</a><td>"
+		if [ $I -eq 4 ]
 		then
-			echo  "</tr>" >> $OUTPUTFILE
+			BANNEDBYDATE="$BANNEDBYDATE</tr>"
 			I=0
-		elif [ $I -lt 5 ]
+		elif [ $I -lt 4 ]
 		then
 			I=$(( I + 1 ))
 		fi
-	done
-fi
-echo '</table></div>' >> $OUTPUTFILE
-echo '<div id="row"><h2>Banned Count by IP</h2><table>' >> $OUTPUTFILE
-zgrep -h "Ban " /var/log/fail2ban.log* | awk -F[\ \:] '{print $10,$8}' | sort | uniq -c | sort -n > TEMPVAR
-if [ ! -s TEMPVAR ]
-then
-	echo  "<tr><td>No IP banned yet.</td></tr>" >> $OUTPUTFILE
-else
-	I=0
-	cat TEMPVAR | while IFS= read -r line
-	do
-		if [ $I -eq 0 ]
+		C=$(( C + 1 ))
+		if [ "$C" -ge 100 ]
 		then
-			echo "<tr>" >> $OUTPUTFILE
+			break
 		fi
-		IP=$( printf '%s\n' "$line" | awk '{print $2}' )
-		IPCOUNT=$( printf '%s\n' "$line" | awk '{print $1}' )
-		IPTYPE=$( printf '%s\n' "$line" | awk '{print $3}' )
-		echo "<td>"$IPCOUNT"&nbsp;<a href=\"$WHOISSERVER$IP\" target=\"_blank\">"$IP"</a>&nbsp;"$IPTYPE"<td>" >> $OUTPUTFILE
-		if [ $I -eq 5 ]
+	done < <(echo "$TEMPVAR")
+fi
+BANNEDBYDATE="$BANNEDBYDATE </table></div>"
+echo "$BANNEDBYDATE" >> $OUTPUTFILE
+#############
+
+if [ "$COUNTBYIP" = true ]
+	then
+		echo "Generating : Top 100 IP"
+		BANNEDBYIP='<div id="row"><h2>Top 100 IP <small>with highest banned count</small></h2><table>'
+		TEMPVAR=$( zgrep -h "Ban " $LOGFILE* | awk -F[\ \:] '{print $10,$8}' | sort | uniq -c | sort -rn ) 
+		if [ -z TEMPVAR ]
 		then
-			echo  "</tr>" >> $OUTPUTFILE
+			BANNEDBYIP="$BANNEDBYIP <tr><td>No IP banned yet.</td></tr>"
+		else
 			I=0
-		elif [ $I -lt 5 ]
-		then
-			I=$(( I + 1 ))
+			C=0
+			while IFS= read -r line
+			do
+				if [ $I -eq 0 ]
+				then
+					BANNEDBYIP="$BANNEDBYIP <tr>"
+				fi
+				IP=$( printf '%s\n' "$line" | awk '{print $2}' )
+				IPCOUNT=$( printf '%s\n' "$line" | awk '{print $1}' )
+				IPTYPE=$( printf '%s\n' "$line" | awk '{print $3}' )
+				BANNEDBYIP="$BANNEDBYIP <td>$IPCOUNT&nbsp;<a href=\"$WHOISSERVER$IP\" target=\"_blank\">$IP</a>&nbsp;$IPTYPE<td>"
+				if [ $I -eq 4 ]
+				then
+					BANNEDBYIP="$BANNEDBYIP </tr>"
+					I=0
+				elif [ $I -lt 4 ]
+				then
+					I=$(( I + 1 ))
+				fi
+				C=$(( C + 1 ))
+				if [ "$C" -ge 100 ]
+				then
+					break
+				fi
+			done < <(echo "$TEMPVAR")
 		fi
-	done
+		BANNEDBYIP="$BANNEDBYIP </table></div>"
+		echo "$BANNEDBYIP" >> $OUTPUTFILE
 fi
-echo '</table></div>' >> $OUTPUTFILE
-echo '<div id="row"><h2>Banned Count by Subnet</h2><table>' >> $OUTPUTFILE
-zgrep -h "Ban " /var/log/fail2ban.log* | awk '{print $NF}' | awk -F\. '{print $1"."$2"."}' | sort | uniq -c  | sort -n | tail > TEMPVAR
-if [ ! -s TEMPVAR ]
-then
-	echo  "<tr><td>No IP banned yet.</td></tr>" >> $OUTPUTFILE
-else
-	I=0
-	cat TEMPVAR | while IFS= read -r line
-	do
-		if [ $I -eq 0 ]
+#############
+
+if [ "$RESOLVESUBNET" = true ]
+	then
+		echo "Generating : Top 100 Subnet"
+		BANNEDBYSUBNET='<div id="row"><h2>Top 100 Subnet <small>being banned</small></h2><table>'
+		TEMPVAR=$( zgrep -h "Ban " $LOGFILE* | awk '{print $NF}' | awk -F\. '{print $1"."$2"."}' | sort | uniq -c  | sort -rn )
+		if [ -z TEMPVAR ]
 		then
-			echo "<tr>" >> $OUTPUTFILE
-		fi
-		echo "<td>"$line"<td>" >> $OUTPUTFILE
-		if [ $I -eq 5 ]
-		then
-			echo  "</tr>" >> $OUTPUTFILE
+			BANNEDBYSUBNET="$BANNEDBYSUBNET <tr><td>No IP banned yet.</td></tr>"
+		else
 			I=0
-		elif [ $I -lt 5 ]
-		then
-			I=$(( I + 1 ))
+			C=0
+			while IFS= read -r line
+			do
+				if [ $I -eq 0 ]
+				then
+					BANNEDBYSUBNET="$BANNEDBYSUBNET <tr>"
+				fi
+				IP=$( printf '%s\n' "$line" | awk '{print $2}' )
+				IPCOUNT=$( printf '%s\n' "$line" | awk '{print $1}' )
+				BANNEDBYSUBNET="$BANNEDBYSUBNET <td>$IPCOUNT&nbsp;<a href=\"$WHOISSERVER$IP""0.0\" target=\"_blank\">$IP</a><td>"
+				if [ $I -eq 4 ]
+				then
+					BANNEDBYSUBNET="$BANNEDBYSUBNET</tr>"
+					I=0
+				elif [ $I -lt 4 ]
+				then
+					I=$(( I + 1 ))
+				fi
+				C=$(( C + 1 ))
+				if [ "$C" -ge 100 ]
+				then
+					break
+				fi
+			done < <(echo "$TEMPVAR")
 		fi
-	done
+		BANNEDBYSUBNET="$BANNEDBYSUBNET </table></div>"
+		echo "$BANNEDBYSUBNET" >> $OUTPUTFILE
 fi
-echo '</table></div>' >> $OUTPUTFILE
+#############
+
 if [ "$RESOLVEHOST" = true ]
 	then
-	echo '<div id="row"><h2>Banned Count with Hostname</h2><table>' >> $OUTPUTFILE
-	zgrep -h "Ban " /var/log/fail2ban.log* | awk '{print $NF}' | sort | logresolve | sort | uniq -c | sort -n > TEMPVAR
-	if [ ! -s TEMPVAR ]
-	then
-		echo  "<tr><td>No IP banned yet.</td></tr>" >> $OUTPUTFILE
-	else
-		I=0
-		cat TEMPVAR | while IFS= read -r line
-		do
-			if [ $I -eq 0 ]
-			then
-				echo "<tr>" >> $OUTPUTFILE
-			fi
-			echo "<td>"$line"<td>" >> $OUTPUTFILE
-			if [ $I -eq 1 ]
-			then
-				echo  "</tr>" >> $OUTPUTFILE
-				I=0
-			elif [ $I -lt 1 ]
-			then
-				I=$(( I + 1 ))
-			fi
-		done
-	fi
-	echo '</table></div>' >> $OUTPUTFILE
+		echo "Generating : Top 100 HostName"
+		BANNEDHOSTNAME='<div id="row"><h2>Top 100 HostName</h2><table>'
+		TEMPVAR=$( zgrep -h "Ban " $LOGFILE* | awk '{print $NF}' | sort | logresolve | sort | uniq -c | sort -rn )
+		if [ -z TEMPVAR ]
+		then
+			BANNEDHOSTNAME="$BANNEDHOSTNAME <tr><td>No IP banned yet.</td></tr>"
+		else
+			I=0
+			C=0
+			while IFS= read -r line
+			do
+				if [ $I -eq 0 ]
+				then
+					BANNEDHOSTNAME="$BANNEDHOSTNAME <tr>"
+				fi
+				BANNEDHOSTNAME="$BANNEDHOSTNAME <td>"$line"<td>"
+				if [ $I -eq 1 ]
+				then
+					BANNEDHOSTNAME="$BANNEDHOSTNAME</tr>"
+					I=0
+				elif [ $I -lt 1 ]
+				then
+					I=$(( I + 1 ))
+				fi
+				C=$(( C + 1 ))
+				if [ "$C" -ge 100 ]
+				then
+					break
+				fi
+			done < <(echo "$TEMPVAR")
+		fi
+		BANNEDHOSTNAME="$BANNEDHOSTNAME </table></div>"
+		echo "$BANNEDHOSTNAME" >> $OUTPUTFILE
 fi
 ###/BODY###
 
 
 ###Footer###
-cat >> $OUTPUTFILE<<END
+read -d '' FOOTER <<END
+</div>
+<div id="footer" align=center>
+Copyright &copy; AhmadShamli
 </div>
 </body>
 </html>
 END
+echo "$FOOTER" >> $OUTPUTFILE
+echo "$FOOTER" >> $SIMPLEOUTPUTFILE
 ###/Footer###
 
 ###Email###
 if [ "$SENDEMAIL" = true ]
 then
 	echo "Sending Email"
-	mutt -e 'set content_type="text/html"' -e "send-hook . \"my_hdr From: ${FROMEMAIL} <${FROMEMAIL}>\"" ${TOEMAIL} -s "Fail2Ban Log Analyzed" <  ${OUTPUTFILE}
+	mutt -e 'set content_type="text/html"' -e "send-hook . \"my_hdr From: ${FROMEMAIL} <${FROMEMAIL}>\"" ${TOEMAIL} -s "Fail2Ban Log Analyzed" <  ${SIMPLEOUTPUTFILE}
 fi
 ###/Email###
+echo "All Done"
