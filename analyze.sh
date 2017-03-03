@@ -9,9 +9,10 @@
 #==> 11 2	* * *	root    /root/analyze.sh  <==
 #
 # https://github.com/AhmadShamli/f2bla/
+#
 
 ###Config###
-LOGFILE='/var/log/fail2ban.log'
+LOGFILE='/var/log/fail2ban/fail2ban.log'
 OUTPUTLOCATION='/var/www/'
 
 WEBDOMAIN='https://www.example.com/'
@@ -22,7 +23,7 @@ SIMPLEOUTPUTFILE=$OUTPUTLOCATION$SIMPLEFILENAME
 
 WHOISSERVER='http://whois.ens.my/'
 
-DATETODAY=$( date )
+DATETODAY=$( date +"%d-%m-%Y %T" )
 DATETODAYDMY=$( date +%d-%m-%Y )
 
 COUNTBYIP=true
@@ -53,12 +54,13 @@ read -d '' PAGEHEAD <<END
 <div id="body">
 <div id="title">
 <h1>Fail2ban Log Analyzer</h1>
-<p>Today Update: $DATETODAY </p>
+<p>Update: $DATETODAY </p>
 <p>Full Report: <a href='$WEBDOMAIN$FILENAME' >Click HERE</a></p>
 </div>
 END
-echo "$PAGEHEAD" > $OUTPUTFILE
-echo "$PAGEHEAD" > $SIMPLEOUTPUTFILE
+
+echo $PAGEHEAD > $OUTPUTFILE
+echo $PAGEHEAD > $SIMPLEOUTPUTFILE
 ###/HEAD###
 
 ###BODY###
@@ -71,11 +73,15 @@ BANNEDSUMMARY="$BANNEDSUMMARY <tr><td colspan=1 align='center'>Current<br /><sma
 
 TODAY=$( date +%Y-%m-%d )
 BANNED=$( grep "Ban " $LOGFILE | grep $TODAY | wc -l ) 
-BANNEDSUMMARY="$BANNEDSUMMARY <tr><td colspan=1 align='center'>Today<br /><small>$TODAY</small></td><td align='center'>$BANNED</td></tr>"
+BANNEDSUMMARY="$BANNEDSUMMARY <tr><td colspan=1 align='center'>Today<br /><small>as of $DATETODAY</small></td><td align='center'>$BANNED</td></tr>"
 
 YESTERDAY=$( date -d 'yesterday' +%Y-%m-%d )
 BANNED=$( grep "Ban " $LOGFILE | grep $YESTERDAY | wc -l ) 
 BANNEDSUMMARY="$BANNEDSUMMARY <tr><td colspan=1 align='center'>Yesterday<br /><small>$YESTERDAY</small></td><td align='center'>$BANNED</td></tr>"
+
+LAST2DAY=$( date --date="2 days ago" +"%Y-%m-%d" )
+BANNED=$( grep "Ban " $LOGFILE | grep $LAST2DAY | wc -l ) 
+BANNEDSUMMARY="$BANNEDSUMMARY <tr><td colspan=1 align='center'>Last 2 days<br /><small>$LAST2DAY</small></td><td align='center'>$BANNED</td></tr>"
 
 THISMONTH=$( date +%Y-%m )
 BANNED=$( zgrep -h "Ban " $LOGFILE* | grep $THISMONTH | wc -l )
@@ -94,13 +100,17 @@ BANNED=$( zgrep -h "Ban " $LOGFILE* | grep $LASTYEAR | wc -l )
 BANNEDSUMMARY="$BANNEDSUMMARY <tr><td colspan=1 align='center'>Last year<br /><small>$LASTYEAR</small></td><td align='center'>$BANNED</td></tr>"
 
 BANNEDSUMMARY="$BANNEDSUMMARY </table></div>"
-echo "$BANNEDSUMMARY" >> $OUTPUTFILE
-echo "$BANNEDSUMMARY" >> $SIMPLEOUTPUTFILE
+{
+   printf "%s\n" "$BANNEDSUMMARY"
+} >>"$OUTPUTFILE" 
+{
+   printf "%s\n" "$BANNEDSUMMARY"
+} >>"$SIMPLEOUTPUTFILE" 
 #############
 
 echo "Generating : Todays' Banned IP"
-BANNEDTODAY="<div id=\"row\"><h2>Todays' Banned IP <small>< today $DATETODAYDMY ></small></h2><table>"
-TEMPVAR=$( grep "Ban " $LOGFILE | grep `date +%Y-%m-%d` | awk -F[\ \:] '{print $10,$8}' | sort | uniq -c | sort -n )
+BANNEDTODAY="<div id=\"row\"><h2>Todays' Banned IP <small>< As of today $DATETODAY ></small></h2><table>"
+TEMPVAR=$( grep "Ban " $LOGFILE | grep $TODAY | awk -F[\ \:] '{print $10,$8}' | sort | uniq -c | sort -n )
 if [ -z TEMPVAR ]
 then
 	BANNEDTODAY="$BANNEDTODAY <tr><td>No IP banned for this date.</td></tr>"
@@ -127,8 +137,49 @@ else
 	done < <(echo "$TEMPVAR")
 fi
 BANNEDTODAY="$BANNEDTODAY </table></div>"
-echo "$BANNEDTODAY" >> $OUTPUTFILE
-echo "$BANNEDTODAY" >> $SIMPLEOUTPUTFILE
+{
+   printf "%s\n" "$BANNEDTODAY"
+} >>"$OUTPUTFILE" 
+{
+   printf "%s\n" "$BANNEDTODAY"
+} >>"$SIMPLEOUTPUTFILE" 
+#############
+
+echo "Generating : Yesterday' Banned IP"
+BANNEDYESTERDAY="<div id=\"row\"><h2>Yesterdays' Banned IP <small>< yesterday $YESTERDAY ></small></h2><table>"
+TEMPVAR=$( grep "Ban " $LOGFILE | grep $YESTERDAY | awk -F[\ \:] '{print $10,$8}' | sort | uniq -c | sort -n )
+if [ -z TEMPVAR ]
+then
+	BANNEDYESTERDAY="$BANNEDYESTERDAY <tr><td>No IP banned for this date.</td></tr>"
+else
+	I=0
+	while IFS= read -r line
+	do
+		if [ $I -eq 0 ]
+		then
+			BANNEDYESTERDAY="$BANNEDYESTERDAY <tr>"
+		fi
+		IP=$( printf '%s\n' "$line" | awk '{print $2}' )
+		IPCOUNT=$( printf '%s\n' "$line" | awk '{print $1}' )
+		IPTYPE=$( printf '%s\n' "$line" | awk '{print $3}' )
+		BANNEDYESTERDAY="$BANNEDYESTERDAY <td>$IPCOUNT &nbsp;<a href=\"$WHOISSERVER$IP\" target=\"_blank\">$IP</a>&nbsp;$IPTYPE<td>"
+		if [ $I -eq 4 ]
+		then
+			BANNEDYESTERDAY="$BANNEDYESTERDAY </tr>"
+			I=0
+		elif [ $I -lt 4 ]
+		then
+			I=$(( I + 1 ))
+		fi
+	done < <(echo "$TEMPVAR")
+fi
+BANNEDYESTERDAY="$BANNEDYESTERDAY </table></div>"
+{
+   printf "%s\n" "$BANNEDYESTERDAY"
+} >>"$OUTPUTFILE" 
+{
+   printf "%s\n" "$BANNEDYESTERDAY"
+} >>"$SIMPLEOUTPUTFILE" 
 #############
 
 echo "Generating : Top 100 Date"
@@ -163,7 +214,9 @@ else
 	done < <(echo "$TEMPVAR")
 fi
 BANNEDBYDATE="$BANNEDBYDATE </table></div>"
-echo "$BANNEDBYDATE" >> $OUTPUTFILE
+{
+   printf "%s\n" "$BANNEDBYDATE"
+} >>"$OUTPUTFILE" 
 #############
 
 if [ "$COUNTBYIP" = true ]
@@ -203,7 +256,9 @@ if [ "$COUNTBYIP" = true ]
 			done < <(echo "$TEMPVAR")
 		fi
 		BANNEDBYIP="$BANNEDBYIP </table></div>"
-		echo "$BANNEDBYIP" >> $OUTPUTFILE
+		{
+		   printf "%s\n" "$BANNEDBYIP"
+		} >>"$OUTPUTFILE" 
 fi
 #############
 
@@ -243,7 +298,9 @@ if [ "$RESOLVESUBNET" = true ]
 			done < <(echo "$TEMPVAR")
 		fi
 		BANNEDBYSUBNET="$BANNEDBYSUBNET </table></div>"
-		echo "$BANNEDBYSUBNET" >> $OUTPUTFILE
+		{
+		   printf "%s\n" "$BANNEDBYSUBNET"
+		} >>"$OUTPUTFILE" 
 fi
 #############
 
@@ -281,7 +338,9 @@ if [ "$RESOLVEHOST" = true ]
 			done < <(echo "$TEMPVAR")
 		fi
 		BANNEDHOSTNAME="$BANNEDHOSTNAME </table></div>"
-		echo "$BANNEDHOSTNAME" >> $OUTPUTFILE
+		{
+		   printf "%s\n" "$BANNEDHOSTNAME"
+		} >>"$OUTPUTFILE" 
 fi
 ###/BODY###
 
@@ -289,14 +348,19 @@ fi
 ###Footer###
 read -d '' FOOTER <<END
 </div>
+<br />
 <div id="footer" align=center>
-Copyright &copy; AhmadShamli
+Copyright &copy; <a href="https://github.com/AhmadShamli/f2bla" target="_blank" title="F2bla" >AhmadShamli </a>
 </div>
 </body>
 </html>
 END
-echo "$FOOTER" >> $OUTPUTFILE
-echo "$FOOTER" >> $SIMPLEOUTPUTFILE
+{
+   printf "%s\n" "$FOOTER"
+} >>"$OUTPUTFILE" 
+{
+   printf "%s\n" "$FOOTER"
+} >>"$SIMPLEOUTPUTFILE" 
 ###/Footer###
 
 ###Email###
