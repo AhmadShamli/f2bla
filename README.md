@@ -1,6 +1,6 @@
 # f2bla
 Analyze fail2ban log and output into readable format
-
+ 
 You may copy or download the analyze.sh to your local copy, and make it executable.
 and run it by calling the script in terminal.
 
